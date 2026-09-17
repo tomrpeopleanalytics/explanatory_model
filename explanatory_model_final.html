@@ -54,6 +54,17 @@
   .pred-item.active{background:#F0F5FF;}
   .pred-name{font-weight:600; font-size:13.5px; color:var(--dark);}
 
+  /* Reset Button Styling */
+  button{
+    font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    border:none; border-radius:8px; padding:10px 16px; width:100%;
+  }
+  .reset{
+    background:var(--blue); color:#fff; transition:background 0.2s ease;
+    margin-top:56px;
+  }
+  .reset:hover{background:var(--dark);}
+
   .chart-area{
     position:relative; width:100%; margin-top:8px;
   }
@@ -69,11 +80,11 @@
     width:100%;
   }
 
-  /* Vertical Zero Reference Line running slightly above top bar and down to axis */
+  /* Vertical Zero Reference Line terminates slightly above 0 tick label */
   .zero-line{
     position:absolute;
     left:calc(140px + 12px + (100% - 152px) * 0.6);
-    top:-8px; bottom:20px; width:2px; background:var(--blue); z-index:3;
+    top:-14px; bottom:20px; width:2px; background:var(--blue); z-index:3;
   }
 
   .bar{
@@ -103,16 +114,17 @@
     display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;
   }
   .interp-box{
-    background:#fff; border:1px solid var(--line); border-radius:8px;
+    background:#fff; border:none; border-radius:8px;
     padding:14px 12px; min-height:84px;
     display:flex; align-items:center; justify-content:center; text-align:center;
     font-size:13px; line-height:1.4; transition:all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
   }
   .interp-box.default-text{
     color:var(--greyl); font-style:italic; font-weight:500;
   }
   .interp-box.active-text{
-    color:var(--dark); font-weight:600; border-color:var(--blue);
+    color:var(--dark); font-weight:600;
   }
   .highlight-pos{color:#D94E00; font-weight:700;}
   .highlight-neg{color:#007A5E; font-weight:700;}
@@ -126,8 +138,9 @@
     .wrap{grid-template-columns:1fr; gap:18px; padding:0 16px;}
     .chart-row{grid-template-columns:1fr; gap:4px;}
     .axis-labels{grid-template-columns:1fr;}
-    .zero-line{left:60%; top:-6px; bottom:20px;}
+    .zero-line{left:60%; top:-10px; bottom:22px;}
     .interp-grid{grid-template-columns:1fr;}
+    .reset{margin-top:16px;}
     header{padding:16px 20px;}
     header h1{font-size:18px;}
   }
@@ -142,11 +155,14 @@
 </header>
 
 <div class="wrap">
+  <!-- Left Side: Predictors List & Reset Button -->
   <div class="card card-left">
     <h2>PREDICTORS</h2>
     <div id="predictorList"></div>
+    <button class="reset" onclick="resetSelection()">Reset selection</button>
   </div>
 
+  <!-- Right Side: Regression Effect Chart & 3-Box Interpretation -->
   <div class="card">
     <h2>ESTIMATED EFFECT ON TURNOVER RISK</h2>
     <div class="chart-area">
@@ -288,7 +304,15 @@ function selectPredictor(key) {
   } else {
     selectedKey = key;
   }
+  updateUI();
+}
 
+function resetSelection() {
+  selectedKey = null;
+  updateUI();
+}
+
+function updateUI() {
   const box1 = document.getElementById("boxPredictor");
   const box2 = document.getElementById("boxEffect");
   const box3 = document.getElementById("boxOutcome");
