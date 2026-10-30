@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turnover Explain — Model Interpretation</title>
+<style>
+  :root{
+    --blue:#0B41CD; --dark:#022366; --lightblue:#1482FA; --green:#00A17D;
+    --orange:#FF7D29; --red:#C40000; --grey:#544F4F; --greyl:#A09A96;
+    --bg:#FFFFFF; --panel:#F5F5F2; --line:#DBD6D1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Roche Sans","Segoe UI",Arial,sans-serif;
+    color:var(--dark); background:var(--bg);
+  }
+  header{
+    background:var(--blue); color:#fff; padding:20px 32px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  header h1{font-size:22px; margin:0; font-weight:700;}
+  header p{margin:4px 0 0; font-size:13px; color:#BDE3FF;}
+
+  .wrap{
+    display:grid; grid-template-columns:220px 1fr; gap:28px;
+    max-width:1180px; margin:26px auto; padding:0 24px;
+  }
+  .card{background:var(--panel); border-radius:14px; padding:24px 26px;}
+  
+  .card-left{
+    display:flex; flex-direction:column; align-items:center; text-align:center;
+  }
+  .card-left h2{
+    text-align:center; width:100%;
+  }
+
+  .card h2{
+    font-size:15px; margin:0 0 18px; color:var(--blue); font-weight:700;
+    letter-spacing:.02em; text-transform:uppercase;
+  }
+  .card h2 .sub-title{
+    text-transform:lowercase; font-weight:400; font-size:13.5px;
+  }
+
+  #predictorList{
+    width:100%; display:flex; flex-direction:column; align-items:center;
+  }
+  .pred-item{
+    background:#fff; border:1px solid var(--line); border-radius:8px;
+    padding:12px 14px; margin-bottom:10px; cursor:pointer;
+    transition:all 0.2s ease; width:100%; text-align:center;
+  }
+  .pred-item:hover, .pred-item.active{
+    border-color:var(--blue); box-shadow:0 2px 8px rgba(11,65,205,0.15);
+  }
+  .pred-item.active{background:#F0F5FF;}
+  .pred-name{font-weight:600; font-size:13px; color:var(--dark); line-height:1.35; display:block;}
+
+  /* Reset Button Styling */
+  button{
+    font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;
+    border:none; border-radius:8px; padding:10px 16px; width:100%;
+  }
+  .reset{
+    background:var(--blue); color:#fff; transition:background 0.2s ease;
+    margin-top:56px;
+  }
+  .reset:hover{background:var(--dark);}
+
+  .chart-area{
+    position:relative; width:100%; margin-top:8px;
+  }
+  .chart-container{
+    display:flex; flex-direction:column; gap:16px; position:relative; z-index:2;
+  }
+  .chart-row{
+    display:grid; grid-template-columns:190px 1fr; align-items:center; gap:14px;
+    font-size:12.5px; font-weight:600;
+  }
+  .bar-wrapper{
+    position:relative; height:32px; background:#EAEBEB; border-radius:4px;
+    width:100%;
+  }
+
+  /* Vertical Zero Reference Line terminates slightly above 0 tick label */
+  .zero-line{
+    position:absolute;
+    left:calc(190px + 14px + (100% - 204px) * 0.6);
+    top:-14px; bottom:20px; width:2px; background:var(--blue); z-index:3;
+  }
+
+  .bar{
+    position:absolute; height:100%; transition:all 0.3s ease; border-radius:2px;
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:12px;
+  }
+  .bar.pos{background:var(--orange); left:60%;}
+  .bar.neg{background:var(--green);}
+  .dimmed{opacity:0.3;}
+
+  .axis-labels{
+    display:grid; grid-template-columns:190px 1fr; gap:14px;
+    margin-top:12px; font-size:11px; color:var(--grey); padding-top:8px;
+  }
+  .axis-ticks{
+    display:flex; justify-content:space-between; position:relative; width:100%;
+  }
+
+  .interpretation-section{
+    margin-top:24px; padding-top:18px; border-top:1px solid var(--line);
+  }
+  .interpretation-title{
+    font-size:15px; font-weight:700; color:var(--blue); text-transform:uppercase;
+    letter-spacing:.02em; margin-bottom:18px;
+  }
+  .interp-grid{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;
+  }
+  .interp-box{
+    background:#fff; border:none; border-radius:8px;
+    padding:14px 14px; min-height:84px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    font-size:13px; line-height:1.45; transition:all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  }
+  .interp-box.default-text{
+    color:var(--greyl); font-style:italic; font-weight:500;
+  }
+  .interp-box.active-text{
+    color:var(--dark); font-weight:600;
+  }
+  .interp-note{
+    font-weight:400; color:var(--grey); display:block; margin-top:2px; font-size:12px;
+  }
+  .highlight-pos{color:#D94E00; font-weight:700;}
+  .highlight-neg{color:#007A5E; font-weight:700;}
+
+  .foot{
+    max-width:1180px; margin:8px auto 30px; padding:14px 24px; font-size:11.5px;
+    color:var(--grey); border-top:1px solid #EAEBEB; font-weight:400;
+  }
+
+  @media (max-width: 768px){
+    .wrap{grid-template-columns:1fr; gap:18px; padding:0 16px;}
+    .chart-row{grid-template-columns:1fr; gap:4px;}
+    .axis-labels{grid-template-columns:1fr;}
+    .zero-line{left:60%; top:-10px; bottom:22px;}
+    .interp-grid{grid-template-columns:1fr;}
+    .reset{margin-top:16px;}
+    header{padding:16px 20px;}
+    header h1{font-size:18px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Which factors are linked to employee turnover?</h1>
+    <p>Explanatory Model</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- Left Side: Predictors List & Reset Button -->
+  <div class="card card-left">
+    <h2>PREDICTORS</h2>
+    <div id="predictorList"></div>
+    <button class="reset" onclick="resetSelection()">Reset selection</button>
+  </div>
+
+  <!-- Right Side: Regression Effect Chart & 3-Box Interpretation -->
+  <div class="card">
+    <h2>RELATIVE EFFECT ON TURNOVER RISK <span class="sub-title">(in percentage points)</span></h2>
+    <div class="chart-area">
+      <div class="zero-line"></div>
+      <div class="chart-container" id="chartContainer"></div>
+      <div class="axis-labels">
+        <div></div>
+        <div class="axis-ticks">
+          <span style="position:absolute; left:0%; transform:translateX(-50%);">-20 pp</span>
+          <span style="position:absolute; left:30%; transform:translateX(-50%);">-10 pp</span>
+          <span style="position:absolute; left:60%; transform:translateX(-50%); font-weight:700; color:var(--blue);">0</span>
+          <span style="position:absolute; left:90%; transform:translateX(-50%);">+10 pp</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="interpretation-section">
+      <div class="interpretation-title">INTERPRETATION OF EACH PREDICTOR</div>
+      <div class="interp-grid">
+        <div class="interp-box default-text" id="boxPredictor">(predictor)</div>
+        <div class="interp-box default-text" id="boxEffect">(direction)</div>
+        <div class="interp-box default-text" id="boxOutcome">(outcome)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  SYNTHETIC data &mdash; illustrative only.
+  Drivers adapted from Griffeth, Hom &amp; Gaertner (2000), <em>Journal of Management</em> 26(3), 463&ndash;488, doi:10.1177/014920630002600305.
+</div>
+
+<script>
+const EFFECTS = [
+  { 
+    key: "promo", 
+    name: "Career Stagnation",
+    pp: 13, 
+    display: "+13 pp", 
+    type: "pos", 
+    widthFrac: 0.325,
+    predictorText: "<div><u>Longer</u></div><div>Career Stagnation</div><div>is associated with an</div>",
+    effectText: "<span class='highlight-pos'><u>INCREASE</u></span>",
+    outcomeText: "<div>in turnover risk,</div><span class='interp-note'>(holding all other factors constant)</span>"
+  },
+  { 
+    key: "pay", 
+    name: "Pay Competitiveness",
+    pp: -3, 
+    display: "-3 pp", 
+    type: "neg", 
+    widthFrac: 0.075,
+    predictorText: "<div><u>Higher</u></div><div>Pay Competitiveness</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in turnover risk,</div><span class='interp-note'>(holding all other factors constant)</span>"
+  },
+  { 
+    key: "manager", 
+    name: "Manager Support",
+    pp: -15, 
+    display: "-15 pp", 
+    type: "neg", 
+    widthFrac: 0.375,
+    predictorText: "<div><u>Higher</u></div><div>Manager Support</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in turnover risk,</div><span class='interp-note'>(holding all other factors constant)</span>"
+  },
+  { 
+    key: "sat", 
+    name: "Job Satisfaction",
+    pp: -17, 
+    display: "-17 pp", 
+    type: "neg", 
+    widthFrac: 0.425,
+    predictorText: "<div><u>Higher</u></div><div>Job Satisfaction</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in turnover risk,</div><span class='interp-note'>(holding all other factors constant)</span>"
+  }
+];
+
+let selectedKey = null;
+
+function renderList() {
+  const list = document.getElementById("predictorList");
+  list.innerHTML = "";
+  EFFECTS.forEach(item => {
+    const div = document.createElement("div");
+    div.className = `pred-item ${selectedKey === item.key ? 'active' : ''}`;
+    div.onclick = () => selectPredictor(item.key);
+    div.innerHTML = `<span class="pred-name">${item.name}</span>`;
+    list.appendChild(div);
+  });
+}
+
+function renderChart() {
+  const chart = document.getElementById("chartContainer");
+  chart.innerHTML = "";
+
+  EFFECTS.forEach(item => {
+    const isSelected = selectedKey === item.key;
+    const isDimmed = selectedKey !== null && !isSelected;
+
+    const row = document.createElement("div");
+    row.className = `chart-row ${isDimmed ? 'dimmed' : ''}`;
+    row.onclick = () => selectPredictor(item.key);
+    row.style.cursor = "pointer";
+
+    let barStyle = "";
+    if (item.type === "pos") {
+      barStyle = `width: ${item.widthFrac * 100}%; left: 60%;`;
+    } else {
+      barStyle = `width: ${item.widthFrac * 100}%; left: ${60 - (item.widthFrac * 100)}%;`;
+    }
+
+    row.innerHTML = `
+      <div>${item.name}</div>
+      <div class="bar-wrapper">
+        <div class="bar ${item.type}" style="${barStyle}">${item.display}</div>
+      </div>
+    `;
+    chart.appendChild(row);
+  });
+}
+
+function selectPredictor(key) {
+  if (selectedKey === key) {
+    selectedKey = null;
+  } else {
+    selectedKey = key;
+  }
+  updateUI();
+}
+
+function resetSelection() {
+  selectedKey = null;
+  updateUI();
+}
+
+function updateUI() {
+  const box1 = document.getElementById("boxPredictor");
+  const box2 = document.getElementById("boxEffect");
+  const box3 = document.getElementById("boxOutcome");
+
+  if (selectedKey) {
+    const current = EFFECTS.find(e => e.key === selectedKey);
+    
+    box1.className = "interp-box active-text";
+    box1.innerHTML = current.predictorText;
+
+    box2.className = "interp-box active-text";
+    box2.innerHTML = current.effectText;
+
+    box3.className = "interp-box active-text";
+    box3.innerHTML = current.outcomeText;
+  } else {
+    box1.className = "interp-box default-text";
+    box1.textContent = "(predictor)";
+
+    box2.className = "interp-box default-text";
+    box2.textContent = "(direction)";
+
+    box3.className = "interp-box default-text";
+    box3.textContent = "(outcome)";
+  }
+
+  renderList();
+  renderChart();
+}
+
+renderList();
+renderChart();
+</script>
+</body>
+</html>
