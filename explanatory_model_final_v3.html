@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turnover Explain — Model Interpretation</title>
+<style>
+  :root{
+    --blue:#0B41CD; --dark:#022366; --lightblue:#1482FA; --green:#00A17D;
+    --orange:#FF7D29; --red:#C40000; --grey:#544F4F; --greyl:#A09A96;
+    --bg:#FFFFFF; --panel:#F5F5F2; --line:#DBD6D1;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Roche Sans","Segoe UI",Arial,sans-serif;
+    color:var(--dark); background:var(--bg);
+  }
+  header{
+    background:var(--blue); color:#fff; padding:20px 32px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  header h1{font-size:22px; margin:0; font-weight:700;}
+  header p{margin:4px 0 0; font-size:13px; color:#BDE3FF;}
+
+  .wrap{
+    max-width:860px; margin:26px auto; padding:0 24px;
+  }
+  .card{background:var(--panel); border-radius:14px; padding:24px 26px;}
+
+  /* Header row aligned with the chart columns */
+  .chart-header-row{
+    display:grid; grid-template-columns:190px 1fr; gap:14px; align-items:center;
+    margin-bottom:20px;
+  }
+  .chart-header-row h2{
+    font-size:15px; margin:0; color:var(--blue); font-weight:700;
+    letter-spacing:.02em; text-transform:uppercase; line-height:1;
+  }
+  .chart-header-row h2 .sub-title{
+    text-transform:lowercase; font-weight:400; font-size:13.5px;
+  }
+  .chart-title-container{
+    position:relative; width:100%; display:flex; align-items:center;
+  }
+  .chart-title-centered{
+    position:absolute; left:60%; transform:translateX(-50%);
+    white-space:nowrap; text-align:center;
+  }
+
+  .pred-btn{
+    background:#fff; border:1px solid var(--line); border-radius:8px;
+    padding:6px 10px; cursor:pointer; font-family:inherit;
+    font-weight:600; font-size:12.5px; color:var(--dark); line-height:1.35;
+    transition:all 0.2s ease; width:100%; text-align:center;
+  }
+  .pred-btn:hover, .pred-btn.active{
+    border-color:var(--blue); box-shadow:0 2px 8px rgba(11,65,205,0.15);
+  }
+  .pred-btn.active{background:#F0F5FF;}
+
+  .chart-area{
+    position:relative; width:100%; margin-top:8px;
+  }
+  .chart-container{
+    display:flex; flex-direction:column; gap:16px; position:relative; z-index:2;
+  }
+  .chart-row{
+    display:grid; grid-template-columns:190px 1fr; align-items:center; gap:14px;
+    font-size:12.5px; font-weight:600;
+  }
+  .bar-wrapper{
+    position:relative; height:32px; background:#EAEBEB; border-radius:4px;
+    width:100%;
+  }
+
+  /* Vertical Zero Reference Line terminates slightly above 0 tick label */
+  .zero-line{
+    position:absolute;
+    left:calc(190px + 14px + (100% - 204px) * 0.6);
+    top:-14px; bottom:20px; width:2px; background:var(--blue); z-index:3;
+  }
+
+  .bar{
+    position:absolute; height:100%; transition:all 0.3s ease; border-radius:2px;
+    display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; font-size:12px;
+  }
+  .bar.pos{background:var(--orange); left:60%;}
+  .bar.neg{background:var(--green);}
+  .dimmed{opacity:0.3;}
+
+  .axis-labels{
+    display:grid; grid-template-columns:190px 1fr; gap:14px;
+    margin-top:12px; font-size:11px; color:var(--grey); padding-top:8px;
+  }
+  .axis-ticks{
+    display:flex; justify-content:space-between; position:relative; width:100%;
+  }
+
+  .interpretation-section{
+    margin-top:24px; padding-top:18px; border-top:1px solid var(--line);
+  }
+  .interpretation-title{
+    font-size:15px; font-weight:700; color:var(--blue); text-transform:uppercase;
+    letter-spacing:.02em; margin-bottom:18px; text-align:center;
+  }
+  .interp-grid{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;
+  }
+  .interp-box{
+    background:#fff; border:none; border-radius:8px;
+    padding:14px 14px; min-height:84px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;
+    font-size:13px; line-height:1.45; transition:all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+  }
+  .interp-box.default-text{
+    color:var(--greyl); font-style:italic; font-weight:500;
+  }
+  .interp-box.active-text{
+    color:var(--dark); font-weight:600;
+  }
+  .interp-note{
+    font-weight:400; color:var(--grey); display:block; margin-top:2px; font-size:12px;
+  }
+  .highlight-pos{color:#D94E00; font-weight:700;}
+  .highlight-neg{color:#007A5E; font-weight:700;}
+
+  .foot{
+    max-width:860px; margin:8px auto 30px; padding:14px 24px; font-size:11.5px;
+    color:var(--grey); border-top:1px solid #EAEBEB; font-weight:400;
+  }
+
+  @media (max-width: 768px){
+    .wrap{padding:0 16px;}
+    .chart-header-row{grid-template-columns:1fr; gap:8px;}
+    .chart-title-centered{position:static; transform:none; text-align:left; white-space:normal;}
+    .chart-row{grid-template-columns:1fr; gap:8px;}
+    .axis-labels{grid-template-columns:1fr;}
+    .zero-line{left:60%; top:-10px; bottom:22px;}
+    .interp-grid{grid-template-columns:1fr;}
+    header{padding:16px 20px;}
+    header h1{font-size:18px;}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Which factors are linked to employee turnover?</h1>
+    <p>Explanatory Model</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="chart-header-row">
+      <h2>PREDICTORS</h2>
+      <div class="chart-title-container">
+        <h2 class="chart-title-centered">
+          RELATIVE EFFECT ON TURNOVER RISK <span class="sub-title">(in percentage points)</span>
+        </h2>
+      </div>
+    </div>
+
+    <div class="chart-area">
+      <div class="zero-line"></div>
+      <div class="chart-container" id="chartContainer"></div>
+      <div class="axis-labels">
+        <div></div>
+        <div class="axis-ticks">
+          <span style="position:absolute; left:0%; transform:translateX(-50%);">-20 pp</span>
+          <span style="position:absolute; left:30%; transform:translateX(-50%);">-10 pp</span>
+          <span style="position:absolute; left:60%; transform:translateX(-50%); font-weight:700; color:var(--blue);">0</span>
+          <span style="position:absolute; left:90%; transform:translateX(-50%);">+10 pp</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="interpretation-section">
+      <div class="interpretation-title">RELATIONSHIP OF PREDICTOR TO TURNOVER RISK</div>
+      <div class="interp-grid">
+        <div class="interp-box default-text" id="boxPredictor">(predictor)</div>
+        <div class="interp-box default-text" id="boxEffect">(direction)</div>
+        <div class="interp-box default-text" id="boxOutcome">(outcome)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  SYNTHETIC data &mdash; illustrative only.
+  Drivers adapted from Griffeth, Hom &amp; Gaertner (2000), <em>Journal of Management</em> 26(3), 463&ndash;488, doi:10.1177/014920630002600305[cite: 1].
+</div>
+
+<script>
+const EFFECTS = [
+  { 
+    key: "promo", 
+    name: "Career Stagnation",
+    pp: 13, 
+    display: "+13 pp", 
+    type: "pos", 
+    widthFrac: 0.325,
+    predictorText: "<div><u>Longer</u></div><div>Career Stagnation</div><div>is associated with an</div>",
+    effectText: "<span class='highlight-pos'><u>INCREASE</u></span>",
+    outcomeText: "<div>in Turnover Risk,</div><span class='interp-note'>(all other factors being equal)</span>"
+  },
+  { 
+    key: "pay", 
+    name: "Pay Competitiveness",
+    pp: -3, 
+    display: "-3 pp", 
+    type: "neg", 
+    widthFrac: 0.075,
+    predictorText: "<div><u>Higher</u></div><div>Pay Competitiveness</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in Turnover Risk,</div><span class='interp-note'>(all other factors being equal)</span>"
+  },
+  { 
+    key: "manager", 
+    name: "Manager Support",
+    pp: -15, 
+    display: "-15 pp", 
+    type: "neg", 
+    widthFrac: 0.375,
+    predictorText: "<div><u>Higher</u></div><div>Manager Support</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in Turnover Risk,</div><span class='interp-note'>(all other factors being equal)</span>"
+  },
+  { 
+    key: "tenure", 
+    name: "Organizational Tenure",
+    pp: -16, 
+    display: "-16 pp", 
+    type: "neg", 
+    widthFrac: 0.40,
+    predictorText: "<div><u>Longer</u></div><div>Organizational Tenure</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in Turnover Risk,</div><span class='interp-note'>(all other factors being equal)</span>"
+  },
+  { 
+    key: "sat", 
+    name: "Job Satisfaction",
+    pp: -17, 
+    display: "-17 pp", 
+    type: "neg", 
+    widthFrac: 0.425,
+    predictorText: "<div><u>Higher</u></div><div>Job Satisfaction</div><div>is associated with a</div>",
+    effectText: "<span class='highlight-neg'><u>DECREASE</u></span>",
+    outcomeText: "<div>in Turnover Risk,</div><span class='interp-note'>(all other factors being equal)</span>"
+  }
+];
+
+let selectedKey = null;
+
+function renderChart() {
+  const chart = document.getElementById("chartContainer");
+  chart.innerHTML = "";
+
+  EFFECTS.forEach(item => {
+    const isSelected = selectedKey === item.key;
+    const isDimmed = selectedKey !== null && !isSelected;
+
+    const row = document.createElement("div");
+    row.className = `chart-row ${isDimmed ? 'dimmed' : ''}`;
+
+    let barStyle = "";
+    if (item.type === "pos") {
+      barStyle = `width: ${item.widthFrac * 100}%; left: 60%;`;
+    } else {
+      barStyle = `width: ${item.widthFrac * 100}%; left: ${60 - (item.widthFrac * 100)}%;`;
+    }
+
+    row.innerHTML = `
+      <button type="button" class="pred-btn ${isSelected ? 'active' : ''}" onclick="selectPredictor('${item.key}')">
+        ${item.name}
+      </button>
+      <div class="bar-wrapper" onclick="selectPredictor('${item.key}')" style="cursor:pointer;">
+        <div class="bar ${item.type}" style="${barStyle}">${item.display}</div>
+      </div>
+    `;
+    chart.appendChild(row);
+  });
+}
+
+function selectPredictor(key) {
+  if (selectedKey === key) {
+    selectedKey = null;
+  } else {
+    selectedKey = key;
+  }
+  updateUI();
+}
+
+function updateUI() {
+  const box1 = document.getElementById("boxPredictor");
+  const box2 = document.getElementById("boxEffect");
+  const box3 = document.getElementById("boxOutcome");
+
+  if (selectedKey) {
+    const current = EFFECTS.find(e => e.key === selectedKey);
+    
+    box1.className = "interp-box active-text";
+    box1.innerHTML = current.predictorText;
+
+    box2.className = "interp-box active-text";
+    box2.innerHTML = current.effectText;
+
+    box3.className = "interp-box active-text";
+    box3.innerHTML = current.outcomeText;
+  } else {
+    box1.className = "interp-box default-text";
+    box1.textContent = "(predictor)";
+
+    box2.className = "interp-box default-text";
+    box2.textContent = "(direction)";
+
+    box3.className = "interp-box default-text";
+    box3.textContent = "(outcome)";
+  }
+
+  renderChart();
+}
+
+renderChart();
+</script>
+</body>
+</html>
